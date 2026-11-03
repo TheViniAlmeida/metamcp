@@ -64,6 +64,9 @@ export default function ApiKeysPage() {
   const { t } = useTranslations();
 
   const { data: apiKeys, refetch } = trpc.frontend.apiKeys.list.useQuery();
+  const { data: endpointsResponse } = trpc.frontend.endpoints.list.useQuery();
+  const endpoints = endpointsResponse?.data ?? [];
+  const endpointNames = new Map(endpoints.map((e) => [e.uuid, e.name]));
   const createMutation = trpc.frontend.apiKeys.create.useMutation({
     onSuccess: (data) => {
       setNewApiKey(data.key);
@@ -97,8 +100,15 @@ export default function ApiKeysPage() {
     defaultValues: {
       name: "",
       user_id: undefined, // Will be set based on ownership selection
+      endpoint_uuid: null,
     },
   });
+
+  // A scoped key must share its owner with the endpoint (public or private)
+  const isPublicKey = form.watch("user_id") === null;
+  const scopeEndpoints = endpoints.filter(
+    (e) => (e.user_id === null) === isPublicKey,
+  );
 
   const onSubmit = (data: CreateApiKeyFormData) => {
     createMutation.mutate(data);
@@ -233,6 +243,7 @@ export default function ApiKeysPage() {
                         "user_id",
                         value === "public" ? null : undefined,
                       );
+                      form.setValue("endpoint_uuid", null);
                     }}
                   >
                     <SelectTrigger>
@@ -249,6 +260,39 @@ export default function ApiKeysPage() {
                   </Select>
                   <p className="text-xs text-muted-foreground mt-1">
                     {t("api-keys:ownershipDescription")}
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="scope" className="text-sm font-medium">
+                    {t("api-keys:scope")}
+                  </Label>
+                  <Select
+                    value={form.watch("endpoint_uuid") ?? "all"}
+                    onValueChange={(value) => {
+                      form.setValue(
+                        "endpoint_uuid",
+                        value === "all" ? null : value,
+                      );
+                    }}
+                  >
+                    <SelectTrigger id="scope">
+                      <SelectValue placeholder={t("api-keys:scope")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {isPublicKey
+                          ? t("api-keys:allPublicEndpoints")
+                          : t("api-keys:allEndpoints")}
+                      </SelectItem>
+                      {scopeEndpoints.map((endpoint) => (
+                        <SelectItem key={endpoint.uuid} value={endpoint.uuid}>
+                          {endpoint.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {t("api-keys:scopeDescription")}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -287,13 +331,14 @@ export default function ApiKeysPage() {
               <TableHead>{t("api-keys:created")}</TableHead>
               <TableHead>{t("common:status")}</TableHead>
               <TableHead>{t("api-keys:ownership")}</TableHead>
+              <TableHead>{t("api-keys:scope")}</TableHead>
               <TableHead className="w-[100px]">{t("common:actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {apiKeys?.apiKeys?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12">
+                <TableCell colSpan={7} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Key className="h-8 w-8 text-muted-foreground" />
                     <p className="text-muted-foreground">
@@ -372,6 +417,20 @@ export default function ApiKeysPage() {
                         ? t("api-keys:public")
                         : t("api-keys:private")}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {apiKey.endpoint_uuid === null ? (
+                      <span className="text-muted-foreground">
+                        {apiKey.user_id === null
+                          ? t("api-keys:allPublicEndpoints")
+                          : t("api-keys:allEndpoints")}
+                      </span>
+                    ) : (
+                      <Badge variant="outline">
+                        {endpointNames.get(apiKey.endpoint_uuid) ??
+                          apiKey.endpoint_uuid}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Button

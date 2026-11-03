@@ -33,5 +33,9 @@
   "ownershipDescription": "API keys privadas são visíveis apenas para você. API keys públicas podem ser usadas por qualquer pessoa.",
   "hideApiKey": "Ocultar API key",
   "showApiKey": "Mostrar API key",
-  "copyFullApiKey": "Copiar API key completa"
+  "copyFullApiKey": "Copiar API key completa",
+  "scope": "Escopo",
+  "allEndpoints": "Todos os meus endpoints",
+  "allPublicEndpoints": "Todos os endpoints públicos",
+  "scopeDescription": "Uma chave presa a um endpoint só abre aquele endpoint e nunca recebe as ferramentas de admin do MetaMCP. O escopo não pode ser alterado depois."
 }

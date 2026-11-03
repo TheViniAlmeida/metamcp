@@ -33,5 +33,9 @@
   "ownershipDescription": "Private API keys are only visible to you. Public API keys can be used by anyone.",
   "hideApiKey": "Hide API key",
   "showApiKey": "Show API key",
-  "copyFullApiKey": "Copy full API key"
+  "copyFullApiKey": "Copy full API key",
+  "scope": "Scope",
+  "allEndpoints": "All my endpoints",
+  "allPublicEndpoints": "All public endpoints",
+  "scopeDescription": "An endpoint-scoped key only opens that endpoint and never gets the MetaMCP admin tools. The scope cannot be changed later."
 }

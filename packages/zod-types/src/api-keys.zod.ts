@@ -6,6 +6,7 @@ export const ApiKeySchema = z.object({
   name: z.string(),
   key: z.string(),
   user_id: z.string().nullable(),
+  endpoint_uuid: z.string().uuid().nullable(),
   created_at: z.date(),
   is_active: z.boolean(),
 });
@@ -20,6 +21,9 @@ export const CreateApiKeyFormSchema = z.object({
       "Name can only contain letters, numbers, spaces, underscores, and hyphens",
     ),
   user_id: z.string().nullable().optional(),
+  // Restrict the key to a single endpoint; null/undefined keeps the
+  // original behaviour (every endpoint the owner can access).
+  endpoint_uuid: z.string().uuid().nullable().optional(),
 });
 
 export const CreateApiKeyRequestSchema = z.object({
@@ -32,6 +36,9 @@ export const CreateApiKeyRequestSchema = z.object({
       "Name can only contain letters, numbers, spaces, underscores, and hyphens",
     ),
   user_id: z.string().nullable().optional(),
+  // Restrict the key to a single endpoint; null/undefined keeps the
+  // original behaviour (every endpoint the owner can access).
+  endpoint_uuid: z.string().uuid().nullable().optional(),
 });
 
 export const CreateApiKeyResponseSchema = z.object({
@@ -81,6 +88,7 @@ export const ListApiKeysResponseSchema = z.object({
       created_at: z.date(),
       is_active: z.boolean(),
       user_id: z.string().nullable(),
+      endpoint_uuid: z.string().uuid().nullable(),
     }),
   ),
 });
@@ -93,12 +101,14 @@ export const ValidateApiKeyResponseSchema = z.object({
   valid: z.boolean(),
   user_id: z.string().optional(),
   key_uuid: z.string().uuid().optional(),
+  endpoint_uuid: z.string().uuid().nullable().optional(),
 });
 
 // Repository schemas
 export const ApiKeyCreateInputSchema = z.object({
   name: z.string(),
   user_id: z.string().nullable().optional(),
+  endpoint_uuid: z.string().uuid().nullable().optional(),
   is_active: z.boolean().optional().default(true),
 });
 

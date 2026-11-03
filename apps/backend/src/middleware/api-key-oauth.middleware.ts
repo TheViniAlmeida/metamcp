@@ -16,6 +16,7 @@ export interface ApiKeyAuthenticatedRequest extends express.Request {
   endpoint: DatabaseEndpoint;
   apiKeyUserId?: string;
   apiKeyUuid?: string;
+  apiKeyEndpointUuid?: string; // Set when the API key is scoped to one endpoint
   oauthUserId?: string; // For OAuth-authenticated requests
   authMethod?: "api_key" | "oauth"; // Track which auth method was used
 }
@@ -197,6 +198,7 @@ export const authenticateApiKey = async (
         // API key valid - perform access control and pass
         authReq.apiKeyUserId = apiKeyResult.user_id || undefined;
         authReq.apiKeyUuid = apiKeyResult.key_uuid;
+        authReq.apiKeyEndpointUuid = apiKeyResult.endpoint_uuid || undefined;
         authReq.authMethod = "api_key";
 
         const accessCheckResult = checkApiKeyAccess(apiKeyResult, endpoint);
@@ -267,6 +269,7 @@ export const authenticateApiKey = async (
         // API key valid - perform access control and pass
         authReq.apiKeyUserId = apiKeyResult.user_id || undefined;
         authReq.apiKeyUuid = apiKeyResult.key_uuid;
+        authReq.apiKeyEndpointUuid = apiKeyResult.endpoint_uuid || undefined;
         authReq.authMethod = "api_key";
 
         const accessCheckResult = checkApiKeyAccess(apiKeyResult, endpoint);
@@ -369,10 +372,18 @@ export const authenticateApiKey = async (
 /**
  * Check if API key has access to the endpoint
  */
-function checkApiKeyAccess(
-  validation: { user_id?: string | null },
-  endpoint: DatabaseEndpoint,
+export function checkApiKeyAccess(
+  validation: { user_id?: string | null; endpoint_uuid?: string | null },
+  endpoint: Pick<DatabaseEndpoint, "uuid" | "user_id">,
 ): { allowed: boolean; message?: string } {
+  // An endpoint-scoped key opens only its own endpoint, public ones included.
+  if (validation.endpoint_uuid && validation.endpoint_uuid !== endpoint.uuid) {
+    return {
+      allowed: false,
+      message: "This API key is scoped to a different endpoint.",
+    };
+  }
+
   const isPublicApiKey = validation.user_id === null;
   const isPrivateEndpoint = endpoint.user_id !== null;
 

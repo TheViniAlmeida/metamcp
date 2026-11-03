@@ -26,6 +26,7 @@ export class ApiKeysRepository {
     name: string;
     key: string;
     user_id: string | null;
+    endpoint_uuid: string | null;
     created_at: Date;
   }> {
     const key = this.generateApiKey();
@@ -36,12 +37,14 @@ export class ApiKeysRepository {
         name: input.name,
         key: key,
         user_id: input.user_id,
+        endpoint_uuid: input.endpoint_uuid ?? null,
         is_active: input.is_active ?? true,
       })
       .returning({
         uuid: apiKeysTable.uuid,
         name: apiKeysTable.name,
         user_id: apiKeysTable.user_id,
+        endpoint_uuid: apiKeysTable.endpoint_uuid,
         created_at: apiKeysTable.created_at,
       });
 
@@ -63,6 +66,7 @@ export class ApiKeysRepository {
         key: apiKeysTable.key,
         created_at: apiKeysTable.created_at,
         is_active: apiKeysTable.is_active,
+        endpoint_uuid: apiKeysTable.endpoint_uuid,
       })
       .from(apiKeysTable)
       .where(eq(apiKeysTable.user_id, userId))
@@ -110,6 +114,7 @@ export class ApiKeysRepository {
         created_at: apiKeysTable.created_at,
         is_active: apiKeysTable.is_active,
         user_id: apiKeysTable.user_id,
+        endpoint_uuid: apiKeysTable.endpoint_uuid,
       })
       .from(apiKeysTable)
       .where(
@@ -170,11 +175,13 @@ export class ApiKeysRepository {
     valid: boolean;
     user_id?: string | null;
     key_uuid?: string;
+    endpoint_uuid?: string | null;
   }> {
     const [apiKey] = await db
       .select({
         uuid: apiKeysTable.uuid,
         user_id: apiKeysTable.user_id,
+        endpoint_uuid: apiKeysTable.endpoint_uuid,
         is_active: apiKeysTable.is_active,
       })
       .from(apiKeysTable)
@@ -193,6 +200,7 @@ export class ApiKeysRepository {
       valid: true,
       user_id: apiKey.user_id,
       key_uuid: apiKey.uuid,
+      endpoint_uuid: apiKey.endpoint_uuid,
     };
   }
 

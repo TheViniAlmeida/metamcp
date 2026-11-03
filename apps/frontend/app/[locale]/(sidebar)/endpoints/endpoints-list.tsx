@@ -330,7 +330,12 @@ export function EndpointsList({ onRefresh }: EndpointsListProps) {
 
         const getApiKey = () => {
           const apiKeys = apiKeysResponse?.apiKeys || [];
-          const activeApiKey = apiKeys.find((key) => key.is_active);
+          // Prefer a key scoped to this endpoint; never one scoped elsewhere.
+          const activeApiKey =
+            apiKeys.find(
+              (key) => key.is_active && key.endpoint_uuid === endpoint.uuid,
+            ) ??
+            apiKeys.find((key) => key.is_active && key.endpoint_uuid === null);
           return activeApiKey?.key || "YOUR_API_KEY";
         };
 

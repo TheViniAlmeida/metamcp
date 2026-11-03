@@ -31,6 +31,12 @@ export async function buildAdminToolsOptions(
     return undefined;
   }
 
+  // Admin tools act on the whole account, so an endpoint-scoped key never
+  // gets them.
+  if (authReq.apiKeyEndpointUuid) {
+    return undefined;
+  }
+
   const userId = await resolveAdminUserIdFromRequest(
     authReq,
     extractAuthToken(authReq),

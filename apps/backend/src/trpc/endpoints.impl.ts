@@ -102,20 +102,16 @@ export const endpointsImplementations = {
           let bearerToken = "";
           if (input.enableApiKeyAuth) {
             try {
-              const userApiKeys = await apiKeysRepository.findByUserId(userId);
-              const activeApiKey = userApiKeys.find((key) => key.is_active);
-
-              if (activeApiKey) {
-                bearerToken = activeApiKey.key;
-              } else {
-                // Create a new API key if none exists
-                const newApiKey = await apiKeysRepository.create({
-                  name: "Auto-generated for MCP Server",
-                  user_id: userId,
-                  is_active: true,
-                });
-                bearerToken = newApiKey.key;
-              }
+              // Always a fresh key scoped to the new endpoint: reusing an
+              // account-wide key as the server's bearer could leak it into
+              // another namespace.
+              const newApiKey = await apiKeysRepository.create({
+                name: `Auto-generated for ${input.name} ${result.uuid.slice(0, 8)}`,
+                user_id: userId,
+                endpoint_uuid: result.uuid,
+                is_active: true,
+              });
+              bearerToken = newApiKey.key;
             } catch (apiKeyError) {
               logger.error(
                 "Error getting API key for MCP server:",

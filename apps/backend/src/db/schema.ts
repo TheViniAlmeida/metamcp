@@ -401,6 +401,11 @@ export const apiKeysTable = pgTable(
     user_id: text("user_id").references(() => usersTable.id, {
       onDelete: "cascade",
     }),
+    // When set, the key only authenticates this endpoint. Deleting the
+    // endpoint deletes the key, so a scoped key never widens to unscoped.
+    endpoint_uuid: uuid("endpoint_uuid").references(() => endpointsTable.uuid, {
+      onDelete: "cascade",
+    }),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -408,6 +413,7 @@ export const apiKeysTable = pgTable(
   },
   (table) => [
     index("api_keys_user_id_idx").on(table.user_id),
+    index("api_keys_endpoint_uuid_idx").on(table.endpoint_uuid),
     index("api_keys_key_idx").on(table.key),
     index("api_keys_is_active_idx").on(table.is_active),
     unique("api_keys_name_per_user_idx").on(table.user_id, table.name),

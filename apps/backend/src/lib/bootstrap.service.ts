@@ -350,7 +350,12 @@ async function ensureUser(
   );
 
   let preservedUserApiKeys:
-    | { name: string; key: string; is_active: boolean }[]
+    | {
+        name: string;
+        key: string;
+        is_active: boolean;
+        endpoint_uuid: string | null;
+      }[]
     | undefined;
 
   let recreated = false;
@@ -368,6 +373,7 @@ async function ensureUser(
             name: apiKeysTable.name,
             key: apiKeysTable.key,
             is_active: apiKeysTable.is_active,
+            endpoint_uuid: apiKeysTable.endpoint_uuid,
           })
           .from(apiKeysTable)
           .where(eq(apiKeysTable.user_id, existing.id));
@@ -452,6 +458,14 @@ async function ensureUser(
   // Restore preserved keys if recreated
   if (recreated && config.preserveApiKeysOnRecreate && preservedUserApiKeys) {
     for (const k of preservedUserApiKeys) {
+      // The user's endpoints are deleted with the user, so restoring an
+      // endpoint-scoped key would silently turn it into an account-wide key.
+      if (k.endpoint_uuid) {
+        console.warn(
+          `⚠️ Not restoring endpoint-scoped API key "${k.name}" for ${email}: its endpoint no longer exists`,
+        );
+        continue;
+      }
       try {
         await db
           .insert(apiKeysTable)
