@@ -25,7 +25,6 @@ export default defineConfig({
     "helmet",
     "nanoid",
     "pg",
-    "shell-quote",
     "spawn-rx",
     "zod",
   ],
