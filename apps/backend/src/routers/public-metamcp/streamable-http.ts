@@ -16,6 +16,7 @@ import { extractClientHeaders } from "../../lib/metamcp/header-forwarding";
 import { MetaMCPHandlerContext } from "../../lib/metamcp/metamcp-middleware/functional-middleware";
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
 import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
+import { SessionOwnerRegistry } from "../../lib/session-owner";
 
 const streamableHttpRouter = express.Router();
 
@@ -24,6 +25,7 @@ const sessionManager =
   new SessionLifetimeManagerImpl<StreamableHTTPServerTransport>(
     "StreamableHTTP",
   );
+const sessionOwners = new SessionOwnerRegistry();
 
 function getRequestContext(
   req: ApiKeyAuthenticatedRequest,
@@ -71,6 +73,7 @@ const cleanupSession = async (
   transport?: StreamableHTTPServerTransport,
 ) => {
   logger.info(`Cleaning up StreamableHTTP session ${sessionId}`);
+  sessionOwners.forget(sessionId);
 
   try {
     // Use provided transport or get from session manager
@@ -107,11 +110,11 @@ streamableHttpRouter.get("/health/sessions", (req, res) => {
 
   res.json({
     timestamp: new Date().toISOString(),
+    // Session IDs are bearer-like handles; only expose the count here.
     streamableHttpSessions: {
       count: sessionIds.length,
-      sessionIds: sessionIds,
     },
-    metaMcpPoolStatus: poolStatus,
+    metaMcpPoolStatus: { idle: poolStatus.idle, active: poolStatus.active },
     totalActiveSessions: sessionIds.length + poolStatus.active,
   });
 });
@@ -122,8 +125,7 @@ streamableHttpRouter.get(
   authenticateApiKey,
   rateLimitMiddleware,
   async (req, res) => {
-    // const authReq = req as ApiKeyAuthenticatedRequest;
-    // const { namespaceUuid, endpointName } = authReq;
+    const authReq = req as ApiKeyAuthenticatedRequest;
     const sessionId = req.headers["mcp-session-id"] as string;
 
     // logger.info(
@@ -132,9 +134,11 @@ streamableHttpRouter.get(
 
     try {
       logger.info(`Looking up existing session: ${sessionId}`);
-      logger.info(`Available sessions:`, sessionManager.getSessionIds());
+      logger.info(`Active sessions: ${sessionManager.getSessionCount()}`);
 
-      const transport = sessionManager.getSession(sessionId);
+      const transport = sessionOwners.isOwner(sessionId, authReq)
+        ? sessionManager.getSession(sessionId)
+        : undefined;
       if (!transport) {
         logger.info(`Session ${sessionId} not found in session manager`);
         res.status(404).end("Session not found");
@@ -234,14 +238,15 @@ streamableHttpRouter.post(
           `Session ${newSessionId} will be cleaned up when DELETE request is received`,
         );
 
-        // Store transport reference
+        // Store transport reference, bound to this endpoint and credential
         sessionManager.addSession(newSessionId, transport);
+        sessionOwners.record(newSessionId, authReq);
 
         logger.info(
           `Public Endpoint Client <-> Proxy sessionId: ${newSessionId} for endpoint ${endpointName} -> namespace ${namespaceUuid}`,
         );
         logger.info(`Stored transport for sessionId: ${newSessionId}`);
-        logger.info(`Current stored sessions:`, sessionManager.getSessionIds());
+        logger.info(`Active sessions: ${sessionManager.getSessionCount()}`);
         logger.info(
           `Total active sessions: ${sessionManager.getSessionCount()}`,
         );
@@ -270,22 +275,22 @@ streamableHttpRouter.post(
       // logger.info(
       //   `Received POST message for public endpoint ${endpointName} -> namespace ${namespaceUuid} sessionId ${sessionId}`,
       // );
-      logger.info(`Available session IDs:`, sessionManager.getSessionIds());
+      logger.info(`Active sessions: ${sessionManager.getSessionCount()}`);
       logger.info(`Looking for sessionId: ${sessionId}`);
       try {
         logger.info(`Looking up existing session: ${sessionId}`);
-        logger.info(`Available sessions:`, sessionManager.getSessionIds());
+        logger.info(`Active sessions: ${sessionManager.getSessionCount()}`);
 
-        const transport = sessionManager.getSession(sessionId);
+        // A session opened through another endpoint or credential is
+        // reported exactly like a missing one.
+        const transport = sessionOwners.isOwner(sessionId, authReq)
+          ? sessionManager.getSession(sessionId)
+          : undefined;
         if (!transport) {
-          logger.error(
-            `Transport not found for sessionId ${sessionId}. Available sessions:`,
-            sessionManager.getSessionIds(),
-          );
+          logger.error(`Transport not found for sessionId ${sessionId}`);
           res.status(404).json({
             error: "Session not found",
             message: `Transport not found for sessionId ${sessionId}`,
-            available_sessions: sessionManager.getSessionIds(),
             timestamp: new Date().toISOString(),
           });
         } else {
@@ -325,12 +330,16 @@ streamableHttpRouter.delete(
       `Received DELETE message for public endpoint ${endpointName} -> namespace ${namespaceUuid} sessionId ${sessionId}`,
     );
 
-    if (sessionId) {
+    if (sessionId && !sessionOwners.isOwner(sessionId, authReq)) {
+      res.status(404).json({
+        error: "Session not found",
+        message: `Transport not found for sessionId ${sessionId}`,
+      });
+    } else if (sessionId) {
       try {
         logger.info(`Starting cleanup for session ${sessionId}`);
         logger.info(
-          `Available sessions before cleanup:`,
-          sessionManager.getSessionIds(),
+          `Active sessions before cleanup: ${sessionManager.getSessionCount()}`,
         );
 
         await cleanupSession(sessionId);
@@ -339,14 +348,12 @@ streamableHttpRouter.delete(
           `Public endpoint session ${sessionId} cleaned up successfully`,
         );
         logger.info(
-          `Available sessions after cleanup:`,
-          sessionManager.getSessionIds(),
+          `Active sessions after cleanup: ${sessionManager.getSessionCount()}`,
         );
 
         res.status(200).json({
           message: "Session cleaned up successfully",
           sessionId: sessionId,
-          remainingSessions: sessionManager.getSessionIds(),
         });
       } catch (error) {
         logger.error("Error in public endpoint /mcp DELETE route:", error);

@@ -13,7 +13,7 @@ import { z } from "zod";
 
 import logger from "@/utils/logger";
 
-import { ApiKeysRepository } from "../db/repositories";
+import { ApiKeysRepository, endpointsRepository } from "../db/repositories";
 import { ApiKeysSerializer } from "../db/serializers";
 
 const apiKeysRepository = new ApiKeysRepository();
@@ -27,9 +27,21 @@ export const apiKeysImplementations = {
       // Use input.user_id if provided, otherwise default to current user (private)
       const apiKeyUserId = input.user_id !== undefined ? input.user_id : userId;
 
+      // A scoped key must point at an endpoint with the same owner as the key
+      // (both public, or both owned by the current user).
+      if (input.endpoint_uuid) {
+        const endpoint = await endpointsRepository.findByUuid(
+          input.endpoint_uuid,
+        );
+        if (!endpoint || endpoint.user_id !== apiKeyUserId) {
+          throw new Error("Endpoint not found or not owned by the key owner");
+        }
+      }
+
       const result = await apiKeysRepository.create({
         name: input.name,
         user_id: apiKeyUserId,
+        endpoint_uuid: input.endpoint_uuid ?? null,
         is_active: true,
       });
 
@@ -106,6 +118,7 @@ export const apiKeysImplementations = {
         valid: result.valid,
         user_id: result.user_id ?? undefined,
         key_uuid: result.key_uuid,
+        endpoint_uuid: result.endpoint_uuid ?? null,
       };
     } catch (error) {
       logger.error("Error validating API key:", error);

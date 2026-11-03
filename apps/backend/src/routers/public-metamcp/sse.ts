@@ -15,11 +15,13 @@ import { extractClientHeaders } from "../../lib/metamcp/header-forwarding";
 import { MetaMCPHandlerContext } from "../../lib/metamcp/metamcp-middleware/functional-middleware";
 import { metaMcpServerPool } from "../../lib/metamcp/metamcp-server-pool";
 import { SessionLifetimeManagerImpl } from "../../lib/session-lifetime-manager";
+import { SessionOwnerRegistry } from "../../lib/session-owner";
 
 const sseRouter = express.Router();
 
 // Session lifetime manager for SSE sessions
 const sessionManager = new SessionLifetimeManagerImpl<Transport>("SSE");
+const sessionOwners = new SessionOwnerRegistry();
 
 function getRequestContext(
   req: ApiKeyAuthenticatedRequest,
@@ -38,6 +40,7 @@ function getRequestContext(
 // Cleanup function for a specific session
 const cleanupSession = async (sessionId: string, transport?: Transport) => {
   logger.info(`Cleaning up SSE session ${sessionId}`);
+  sessionOwners.forget(sessionId);
 
   try {
     // Use provided transport or get from session manager
@@ -115,6 +118,7 @@ sseRouter.get(
       );
 
       sessionManager.addSession(sessionId, webAppTransport);
+      sessionOwners.record(sessionId, authReq);
 
       // Handle cleanup when connection closes
       res.on("close", async () => {
@@ -138,8 +142,7 @@ sseRouter.post(
   authenticateApiKey,
   rateLimitMiddleware,
   async (req, res) => {
-    // const authReq = req as ApiKeyAuthenticatedRequest;
-    // const { namespaceUuid, endpointName } = authReq;
+    const authReq = req as ApiKeyAuthenticatedRequest;
 
     try {
       const sessionId = req.query.sessionId;
@@ -147,9 +150,11 @@ sseRouter.post(
       //   `Received POST message for public endpoint ${endpointName} -> namespace ${namespaceUuid} sessionId ${sessionId}`,
       // );
 
-      const transport = sessionManager.getSession(
-        sessionId as string,
-      ) as SSEServerTransport;
+      const transport = (
+        sessionOwners.isOwner(sessionId as string, authReq)
+          ? sessionManager.getSession(sessionId as string)
+          : undefined
+      ) as SSEServerTransport | undefined;
       if (!transport) {
         res.status(404).end("Session not found");
         return;

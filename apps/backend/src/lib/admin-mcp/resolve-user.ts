@@ -11,6 +11,10 @@ export async function resolveUserIdFromApiKey(key: string): Promise<string> {
     throw new Error("Invalid or inactive API key");
   }
 
+  if (validation.endpoint_uuid) {
+    throw new Error("Endpoint-scoped API keys cannot use admin tools");
+  }
+
   if (validation.user_id) {
     return validation.user_id;
   }

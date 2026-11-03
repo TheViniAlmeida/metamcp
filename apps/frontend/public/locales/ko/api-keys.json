@@ -33,5 +33,9 @@
   "ownershipDescription": "비공개 API Key는 본인만 볼 수 있습니다. 공개 API Key는 누구나 사용할 수 있습니다.",
   "hideApiKey": "API Key 숨기기",
   "showApiKey": "API Key 표시",
-  "copyFullApiKey": "전체 API Key 복사"
+  "copyFullApiKey": "전체 API Key 복사",
+  "scope": "범위",
+  "allEndpoints": "내 모든 엔드포인트",
+  "allPublicEndpoints": "모든 공개 엔드포인트",
+  "scopeDescription": "엔드포인트로 제한된 키는 해당 엔드포인트만 열 수 있으며 MetaMCP 관리자 도구를 받지 않습니다. 범위는 나중에 변경할 수 없습니다."
 }

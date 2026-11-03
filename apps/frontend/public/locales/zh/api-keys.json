@@ -33,5 +33,9 @@
   "ownershipDescription": "私有 API 密钥只对您可见。公开 API 密钥可供任何人使用。",
   "hideApiKey": "隐藏 API 密钥",
   "showApiKey": "显示 API 密钥",
-  "copyFullApiKey": "复制完整 API 密钥"
+  "copyFullApiKey": "复制完整 API 密钥",
+  "scope": "范围",
+  "allEndpoints": "我的所有端点",
+  "allPublicEndpoints": "所有公共端点",
+  "scopeDescription": "限定到某个端点的密钥只能访问该端点，且永远不会获得 MetaMCP 管理工具。范围创建后无法更改。"
 }

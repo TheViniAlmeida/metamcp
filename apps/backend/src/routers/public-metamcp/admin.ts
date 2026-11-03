@@ -1,6 +1,9 @@
 import express from "express";
 
-import { authenticateApiKey } from "@/middleware/api-key-oauth.middleware";
+import {
+  ApiKeyAuthenticatedRequest,
+  authenticateApiKey,
+} from "@/middleware/api-key-oauth.middleware";
 import { lookupEndpoint } from "@/middleware/lookup-endpoint-middleware";
 import logger from "@/utils/logger";
 
@@ -12,6 +15,23 @@ const adminRouter = express.Router();
 
 // JSON body parser for admin routes
 adminRouter.use(express.json());
+
+// These routes act on every MCP server, not just the endpoint's namespace,
+// so an endpoint-scoped API key must never reach them.
+const denyEndpointScopedKeys = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+) => {
+  if ((req as ApiKeyAuthenticatedRequest).apiKeyEndpointUuid) {
+    res.status(403).json({
+      error: "Access denied",
+      message: "Endpoint-scoped API keys cannot use the admin API.",
+    });
+    return;
+  }
+  next();
+};
 
 /**
  * POST /metamcp/admin/reset-errors
@@ -26,6 +46,7 @@ adminRouter.post(
   "/:endpoint_name/admin/reset-errors",
   lookupEndpoint,
   authenticateApiKey,
+  denyEndpointScopedKeys,
   async (req, res) => {
     try {
       const { serverUuid } = req.body || {};
@@ -91,6 +112,7 @@ adminRouter.get(
   "/:endpoint_name/admin/error-status",
   lookupEndpoint,
   authenticateApiKey,
+  denyEndpointScopedKeys,
   async (req, res) => {
     try {
       const allServers = await mcpServersRepository.findAll();
