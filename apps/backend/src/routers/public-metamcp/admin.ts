@@ -16,17 +16,28 @@ const adminRouter = express.Router();
 // JSON body parser for admin routes
 adminRouter.use(express.json());
 
-// These routes act on every MCP server, not just the endpoint's namespace,
-// so an endpoint-scoped API key must never reach them.
-const denyEndpointScopedKeys = (
+// These routes act on every MCP server, not just the endpoint's namespace.
+// They need an account-wide credential: an endpoint without auth would
+// otherwise let anyone reach them, and an endpoint-scoped API key must never
+// reach past its own endpoint.
+export const requireAccountCredential = (
   req: express.Request,
   res: express.Response,
   next: express.NextFunction,
 ) => {
-  if ((req as ApiKeyAuthenticatedRequest).apiKeyEndpointUuid) {
+  const authReq = req as ApiKeyAuthenticatedRequest;
+  if (authReq.apiKeyEndpointUuid) {
     res.status(403).json({
       error: "Access denied",
       message: "Endpoint-scoped API keys cannot use the admin API.",
+    });
+    return;
+  }
+  if (!authReq.apiKeyUuid && !authReq.oauthUserId) {
+    res.status(401).json({
+      error: "Authentication required",
+      message:
+        "The admin API needs an account-wide API key or OAuth token on an endpoint with authentication enabled.",
     });
     return;
   }
@@ -34,19 +45,21 @@ const denyEndpointScopedKeys = (
 };
 
 /**
- * POST /metamcp/admin/reset-errors
+ * POST /metamcp/:endpoint_name/admin/reset-errors
  *
  * Resets ERROR state for MCP servers without requiring a full backend restart.
  * Optionally targets a specific server by UUID, or resets all if no UUID given.
  *
  * Body: { "serverUuid": "optional-specific-uuid" }
- * Auth: Same API key as MCP endpoints (X-API-Key header)
+ * Auth: an account-wide API key (X-API-Key or Bearer) or OAuth token on an
+ * endpoint with authentication enabled; endpoint-scoped keys get 403 and an
+ * endpoint without authentication gets 401.
  */
 adminRouter.post(
   "/:endpoint_name/admin/reset-errors",
   lookupEndpoint,
   authenticateApiKey,
-  denyEndpointScopedKeys,
+  requireAccountCredential,
   async (req, res) => {
     try {
       const { serverUuid } = req.body || {};
@@ -104,15 +117,16 @@ adminRouter.post(
 );
 
 /**
- * GET /metamcp/admin/error-status
+ * GET /metamcp/:endpoint_name/admin/error-status
  *
  * Returns current error status of all servers (for diagnostics).
+ * Auth: same as reset-errors.
  */
 adminRouter.get(
   "/:endpoint_name/admin/error-status",
   lookupEndpoint,
   authenticateApiKey,
-  denyEndpointScopedKeys,
+  requireAccountCredential,
   async (req, res) => {
     try {
       const allServers = await mcpServersRepository.findAll();

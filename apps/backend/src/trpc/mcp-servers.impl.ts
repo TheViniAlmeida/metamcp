@@ -25,6 +25,12 @@ import { clearOverrideCache } from "../lib/metamcp/metamcp-middleware/tool-overr
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
 import { serverErrorTracker } from "../lib/metamcp/server-error-tracker";
 import { convertDbServerToParams } from "../lib/metamcp/utils";
+import {
+  canAssignOwner,
+  canChangeOwner,
+  OWNER_CHANGE_DENIED_MESSAGE,
+  OWNER_DENIED_MESSAGE,
+} from "../lib/ownership";
 import { persistPreRegisteredOAuthClient } from "./pre-registered-oauth";
 
 export const mcpServersImplementations = {
@@ -33,6 +39,13 @@ export const mcpServersImplementations = {
     userId: string,
   ): Promise<z.infer<typeof CreateMcpServerResponseSchema>> => {
     try {
+      if (!canAssignOwner(input.user_id, userId)) {
+        return {
+          success: false as const,
+          message: OWNER_DENIED_MESSAGE,
+        };
+      }
+
       // Determine user ownership based on input.user_id or default to current user
       const effectiveUserId =
         input.user_id !== undefined ? input.user_id : userId;
@@ -385,6 +398,13 @@ export const mcpServersImplementations = {
         return {
           success: false as const,
           message: "Access denied: You can only update servers you own",
+        };
+      }
+
+      if (!canChangeOwner(input.user_id, userId, server.user_id)) {
+        return {
+          success: false as const,
+          message: OWNER_CHANGE_DENIED_MESSAGE,
         };
       }
 

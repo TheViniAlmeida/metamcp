@@ -3,8 +3,10 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-// The admin API acts on every MCP server, so an endpoint-scoped key must be
-// refused before any handler runs.
+// The admin API acts on every MCP server, so it needs an account-wide
+// credential: an endpoint-scoped key and an endpoint without auth (where
+// authenticateApiKey passes everything through) must both be refused before
+// any handler runs.
 
 const mocks = vi.hoisted(() => ({
   findAll: vi.fn(async () => []),
@@ -28,11 +30,13 @@ vi.mock("@/middleware/api-key-oauth.middleware", () => ({
     _res: express.Response,
     next: express.NextFunction,
   ) => {
+    const r = req as unknown as Record<string, string>;
+    const key = req.headers["x-test-key"];
+    if (key) r.apiKeyUuid = key as string;
     const scope = req.headers["x-test-scope"];
-    if (scope) {
-      (req as unknown as { apiKeyEndpointUuid: string }).apiKeyEndpointUuid =
-        scope as string;
-    }
+    if (scope) r.apiKeyEndpointUuid = scope as string;
+    const oauth = req.headers["x-test-oauth"];
+    if (oauth) r.oauthUserId = oauth as string;
     next();
   },
 }));
@@ -54,7 +58,7 @@ vi.mock("../../lib/startup", () => ({
 
 import adminRouter from "./admin";
 
-describe("admin router with endpoint-scoped keys", () => {
+describe("admin router credentials", () => {
   let baseUrl: string;
   let server: ReturnType<express.Express["listen"]>;
 
@@ -72,7 +76,7 @@ describe("admin router with endpoint-scoped keys", () => {
   });
 
   it("refuses error-status and reset-errors for a scoped key", async () => {
-    const headers = { "x-test-scope": "ep-infra" };
+    const headers = { "x-test-key": "key-infra", "x-test-scope": "ep-infra" };
     const status = await fetch(`${baseUrl}/infra/admin/error-status`, {
       headers,
     });
@@ -86,8 +90,26 @@ describe("admin router with endpoint-scoped keys", () => {
     expect(mocks.findAll).not.toHaveBeenCalled();
   });
 
-  it("keeps the admin API for unscoped keys", async () => {
-    const res = await fetch(`${baseUrl}/infra/admin/error-status`);
-    expect(res.status).toBe(200);
+  it("refuses requests without a credential (endpoint without auth)", async () => {
+    const status = await fetch(`${baseUrl}/open/admin/error-status`);
+    const reset = await fetch(`${baseUrl}/open/admin/reset-errors`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(status.status).toBe(401);
+    expect(reset.status).toBe(401);
+    expect(mocks.findAll).not.toHaveBeenCalled();
+  });
+
+  it("keeps the admin API for unscoped keys and OAuth users", async () => {
+    const byKey = await fetch(`${baseUrl}/infra/admin/error-status`, {
+      headers: { "x-test-key": "key-all" },
+    });
+    const byOauth = await fetch(`${baseUrl}/infra/admin/error-status`, {
+      headers: { "x-test-oauth": "user-1" },
+    });
+    expect(byKey.status).toBe(200);
+    expect(byOauth.status).toBe(200);
   });
 });

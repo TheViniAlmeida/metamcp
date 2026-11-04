@@ -37,6 +37,11 @@ export async function buildAdminToolsOptions(
     return undefined;
   }
 
+  // Nor does a public key: it belongs to no account to act as.
+  if (authReq.apiKeyUuid && !authReq.apiKeyUserId) {
+    return undefined;
+  }
+
   const userId = await resolveAdminUserIdFromRequest(
     authReq,
     extractAuthToken(authReq),

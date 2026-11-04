@@ -1,9 +1,6 @@
 import cors from "cors";
 import express from "express";
 
-import logger from "@/utils/logger";
-
-import { endpointsRepository } from "../db/repositories/endpoints.repo";
 import adminRouter from "./public-metamcp/admin";
 import { openApiRouter } from "./public-metamcp/openapi";
 import sseRouter from "./public-metamcp/sse";
@@ -55,35 +52,14 @@ publicEndpointsRouter.get("/health", (req, res) => {
   });
 });
 
-// List all available public endpoints
-publicEndpointsRouter.get("/", async (req, res) => {
-  try {
-    const endpoints = await endpointsRepository.findAllWithNamespaces();
-    const publicEndpoints = endpoints.map((endpoint) => ({
-      name: endpoint.name,
-      description: endpoint.description,
-      namespace: endpoint.namespace.name,
-      endpoints: {
-        mcp: `/metamcp/${endpoint.name}/mcp`,
-        sse: `/metamcp/${endpoint.name}/sse`,
-        api: `/metamcp/${endpoint.name}/api`,
-        openapi: `/metamcp/${endpoint.name}/api/openapi.json`,
-      },
-    }));
-
-    res.json({
-      service: "public-endpoints",
-      version: "1.0.0",
-      description: "Public MetaMCP endpoints",
-      endpoints: publicEndpoints,
-    });
-  } catch (error) {
-    logger.error("Error listing public endpoints:", error);
-    res.status(500).json({
-      error: "Internal server error",
-      message: "Failed to list endpoints",
-    });
-  }
+// Service info only: endpoint names, descriptions and namespaces are not
+// listed to unauthenticated callers.
+publicEndpointsRouter.get("/", (req, res) => {
+  res.json({
+    service: "public-endpoints",
+    version: "1.0.0",
+    description: "Public MetaMCP endpoints",
+  });
 });
 
 export default publicEndpointsRouter;

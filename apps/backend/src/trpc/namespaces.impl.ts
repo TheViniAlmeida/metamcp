@@ -33,6 +33,12 @@ import {
   mapOverrideNameToOriginal,
 } from "../lib/metamcp/metamcp-middleware/tool-overrides.functional";
 import { metaMcpServerPool } from "../lib/metamcp/metamcp-server-pool";
+import {
+  canAssignOwner,
+  canChangeOwner,
+  OWNER_CHANGE_DENIED_MESSAGE,
+  OWNER_DENIED_MESSAGE,
+} from "../lib/ownership";
 
 export const namespacesImplementations = {
   create: async (
@@ -40,6 +46,13 @@ export const namespacesImplementations = {
     userId: string,
   ): Promise<z.infer<typeof CreateNamespaceResponseSchema>> => {
     try {
+      if (!canAssignOwner(input.user_id, userId)) {
+        return {
+          success: false as const,
+          message: OWNER_DENIED_MESSAGE,
+        };
+      }
+
       // Determine user ownership based on input.user_id or default to current user
       const effectiveUserId =
         input.user_id !== undefined ? input.user_id : userId;
@@ -332,6 +345,13 @@ export const namespacesImplementations = {
         return {
           success: false as const,
           message: "Access denied: You can only update namespaces you own",
+        };
+      }
+
+      if (!canChangeOwner(input.user_id, userId, existingNamespace.user_id)) {
+        return {
+          success: false as const,
+          message: OWNER_CHANGE_DENIED_MESSAGE,
         };
       }
 
