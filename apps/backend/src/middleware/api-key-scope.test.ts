@@ -238,6 +238,28 @@ describe("admin tools never reach endpoint-scoped keys", () => {
     ).resolves.toEqual({ enabled: true, userId: OWNER });
   });
 
+  it("buildAdminToolsOptions returns nothing for a public key", async () => {
+    const authReq = {
+      headers: { "x-api-key": "sk_mt_pub" },
+      apiKeyUuid: "key-pub",
+    } as unknown as ApiKeyAuthenticatedRequest;
+    await expect(
+      buildAdminToolsOptions(endpoint(PUBLIC_EP, null), authReq),
+    ).resolves.toBeUndefined();
+  });
+
+  it("resolveUserIdFromApiKey rejects an unscoped public key", async () => {
+    mocks.validateApiKey.mockResolvedValue({
+      valid: true,
+      user_id: null,
+      key_uuid: "key-pub",
+      endpoint_uuid: null,
+    });
+    await expect(resolveUserIdFromApiKey("sk_mt_pub")).rejects.toThrow(
+      /Public API keys/,
+    );
+  });
+
   it("resolveUserIdFromApiKey rejects a scoped public key", async () => {
     mocks.validateApiKey.mockResolvedValue({
       valid: true,

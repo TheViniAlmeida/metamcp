@@ -18,6 +18,7 @@ import {
   namespacesRepository,
 } from "../db/repositories";
 import { EndpointsSerializer } from "../db/serializers";
+import { canAssignOwner, OWNER_DENIED_MESSAGE } from "../lib/ownership";
 
 const apiKeysRepository = new ApiKeysRepository();
 
@@ -33,6 +34,13 @@ export const endpointsImplementations = {
         return {
           success: false as const,
           message: "Endpoint name already exists",
+        };
+      }
+
+      if (!canAssignOwner(input.user_id, userId)) {
+        return {
+          success: false as const,
+          message: OWNER_DENIED_MESSAGE,
         };
       }
 

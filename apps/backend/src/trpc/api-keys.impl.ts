@@ -15,6 +15,7 @@ import logger from "@/utils/logger";
 
 import { ApiKeysRepository, endpointsRepository } from "../db/repositories";
 import { ApiKeysSerializer } from "../db/serializers";
+import { canAssignOwner, OWNER_DENIED_MESSAGE } from "../lib/ownership";
 
 const apiKeysRepository = new ApiKeysRepository();
 
@@ -24,6 +25,10 @@ export const apiKeysImplementations = {
     userId: string,
   ): Promise<z.infer<typeof CreateApiKeyResponseSchema>> => {
     try {
+      if (!canAssignOwner(input.user_id, userId)) {
+        throw new Error(OWNER_DENIED_MESSAGE);
+      }
+
       // Use input.user_id if provided, otherwise default to current user (private)
       const apiKeyUserId = input.user_id !== undefined ? input.user_id : userId;
 
