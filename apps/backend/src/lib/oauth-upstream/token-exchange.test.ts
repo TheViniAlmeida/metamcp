@@ -214,6 +214,30 @@ describe("refreshAccessToken", () => {
     expect(tokens.refresh_token).toBe("RT_original");
   });
 
+  it("stamps obtained_at so the expiry does not depend on updated_at", async () => {
+    const fetchImpl = vi.fn<FetchImpl>(async () =>
+      jsonResponse(200, {
+        access_token: "AT_new",
+        token_type: "Bearer",
+        expires_in: 3600,
+      }),
+    );
+    const before = Math.floor(Date.now() / 1000);
+
+    const tokens = await refreshAccessToken({
+      tokenEndpoint: "https://example.com/token",
+      refreshToken: "RT_original",
+      clientId: "client-1",
+      authMethod: "none",
+      fetchImpl,
+    });
+
+    expect(tokens.obtained_at).toBeGreaterThanOrEqual(before);
+    expect(tokens.obtained_at).toBeLessThanOrEqual(
+      Math.floor(Date.now() / 1000),
+    );
+  });
+
   it("uses the new refresh_token when the upstream rotates it", async () => {
     const fetchImpl = vi.fn<FetchImpl>(async () =>
       jsonResponse(200, {

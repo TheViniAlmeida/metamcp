@@ -24,6 +24,8 @@ export interface OAuthTokens {
   expires_in?: number;
   scope?: string;
   refresh_token?: string;
+  // Unix seconds, set by MetaMCP when the token response arrives.
+  obtained_at?: number;
   // Some providers (Salesforce, Microsoft) include additional fields like
   // `id_token`, `instance_url`, `signature`, etc. We keep them via index
   // signature so the jsonb round-trip preserves them.
@@ -146,6 +148,10 @@ async function postFormToToken({
     );
   }
 
+  // Stamp when the token was obtained so its expiry can be computed later
+  // without relying on the session row's `updated_at`, which other writes
+  // (code_verifier, expected_state, client_information) also bump.
+  tokens.obtained_at = Math.floor(Date.now() / 1000);
   return tokens;
 }
 

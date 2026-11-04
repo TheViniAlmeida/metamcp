@@ -59,8 +59,13 @@ export const inFlightRefreshes = new Map<string, Promise<RefreshResult>>();
 //
 // NOTE: This is intentionally safe to call repeatedly — it short-circuits
 // when there is no refresh_token or no client_id to use.
+//
+// `expectedAccessToken` is the token the caller saw fail or expire. When the
+// stored token already differs, another connection refreshed it first and
+// that token is returned instead of refreshing again.
 export async function tryRefreshUpstreamTokens(
   serverParams: Pick<ServerParameters, "uuid" | "name" | "url">,
+  expectedAccessToken?: string,
 ): Promise<RefreshResult> {
   const inFlight = inFlightRefreshes.get(serverParams.uuid);
   if (inFlight) {
@@ -71,7 +76,7 @@ export async function tryRefreshUpstreamTokens(
   }
   const promise = (async () => {
     try {
-      return await doRefresh(serverParams);
+      return await doRefresh(serverParams, expectedAccessToken);
     } finally {
       inFlightRefreshes.delete(serverParams.uuid);
     }
@@ -82,6 +87,7 @@ export async function tryRefreshUpstreamTokens(
 
 async function doRefresh(
   serverParams: Pick<ServerParameters, "uuid" | "name" | "url">,
+  expectedAccessToken?: string,
 ): Promise<RefreshResult> {
   if (!serverParams.url) {
     return { status: "no_session" };
@@ -97,6 +103,13 @@ async function doRefresh(
   const currentTokens = session.tokens as
     | (OAuthTokens & { refresh_token?: string })
     | null;
+  if (
+    expectedAccessToken !== undefined &&
+    typeof currentTokens?.access_token === "string" &&
+    currentTokens.access_token !== expectedAccessToken
+  ) {
+    return { status: "refreshed", tokens: currentTokens };
+  }
   if (!currentTokens?.refresh_token) {
     return { status: "no_refresh_token" };
   }
@@ -174,10 +187,20 @@ async function doRefresh(
     };
   }
 
-  await oauthSessionsRepository.upsert({
-    mcp_server_uuid: serverParams.uuid,
-    tokens: newTokens,
-  });
+  try {
+    await oauthSessionsRepository.upsert({
+      mcp_server_uuid: serverParams.uuid,
+      tokens: newTokens,
+    });
+  } catch (error) {
+    // The driver's error message carries the query parameters, i.e. the new
+    // tokens: log only the error class.
+    logger.error(
+      `[oauth] proxy refresh could not persist tokens — server=${serverParams.uuid} ` +
+        `error=${error instanceof Error ? error.name : typeof error}`,
+    );
+    return { status: "failed", error: "persist_failed" };
+  }
 
   logger.info(
     `[oauth] proxy refresh succeeded — server=${serverParams.uuid} ` +
