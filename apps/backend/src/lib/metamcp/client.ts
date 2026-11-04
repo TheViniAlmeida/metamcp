@@ -8,6 +8,7 @@ import { ServerParameters } from "@repo/zod-types";
 import logger from "@/utils/logger";
 
 import { oauthSessionsRepository } from "../../db/repositories";
+import { createLiveTokenFetch } from "../oauth-upstream/live-token-fetch";
 import { tryRefreshUpstreamTokens } from "../oauth-upstream/refresh-on-401";
 import { recoverFromPostAuthRace } from "../oauth-upstream/retry-post-auth";
 import { isUpstreamUnauthorizedError } from "../oauth-upstream/token-exchange";
@@ -129,6 +130,13 @@ export const createMetaMcpClient = (
 
     const hasHeaders = Object.keys(headers).length > 0;
 
+    // Pooled connections outlive the access token: set the bearer per
+    // request and refresh it before it expires or after a 401.
+    const oauthAccessToken = serverParams.oauth_tokens?.access_token;
+    const liveTokenFetch = oauthAccessToken
+      ? createLiveTokenFetch(serverParams, oauthAccessToken)
+      : undefined;
+
     if (!hasHeaders) {
       transport = new StreamableHTTPClientTransport(new URL(transformedUrl));
     } else {
@@ -136,6 +144,7 @@ export const createMetaMcpClient = (
         requestInit: {
           headers,
         },
+        fetch: liveTokenFetch,
       });
     }
   } else {
@@ -353,14 +362,20 @@ export const connectMetaMcpClient = async (
       //    a server-to-server refresh once before counting this as a
       //    retry. On success the next loop iteration rebuilds the
       //    transport using the freshly-rotated access_token; on failure
-      //    we fall through.
+      //    we fall through. The live-token fetch may already have
+      //    refreshed on this 401: passing the token we connected with
+      //    makes the helper reuse that stored token instead of refreshing
+      //    again.
       if (
         isHttpServer &&
         serverParams.oauth_tokens?.refresh_token &&
         isUpstreamUnauthorizedError(error)
       ) {
         try {
-          const refresh = await tryRefreshUpstreamTokens(serverParams);
+          const refresh = await tryRefreshUpstreamTokens(
+            serverParams,
+            serverParams.oauth_tokens.access_token,
+          );
           if (refresh.status === "refreshed" && refresh.tokens) {
             serverParams.oauth_tokens = {
               access_token: refresh.tokens.access_token,

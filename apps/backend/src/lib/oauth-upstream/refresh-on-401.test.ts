@@ -86,6 +86,69 @@ describe("tryRefreshUpstreamTokens", () => {
     });
   });
 
+  it("returns the stored token without refreshing when another caller already replaced it", async () => {
+    const { tryRefreshUpstreamTokens, findByMcpServerUuid, upsert } =
+      await loadModule();
+    findByMcpServerUuid.mockResolvedValue({
+      mcp_server_uuid: SERVER.uuid,
+      client_information: { client_id: "c1" },
+      tokens: {
+        access_token: "ALREADY_NEW",
+        token_type: "Bearer",
+        refresh_token: "RT",
+      },
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const result = await tryRefreshUpstreamTokens(SERVER, "OLD");
+
+    expect(result.status).toBe("refreshed");
+    expect(result.tokens?.access_token).toBe("ALREADY_NEW");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("fails without logging the tokens when they cannot be persisted", async () => {
+    const { tryRefreshUpstreamTokens, findByMcpServerUuid, upsert } =
+      await loadModule();
+    const logger = (await import("../../utils/logger")).default;
+    findByMcpServerUuid.mockResolvedValue({
+      mcp_server_uuid: SERVER.uuid,
+      client_information: {
+        client_id: "c1",
+        token_endpoint: "https://upstream/token",
+      },
+      tokens: {
+        access_token: "OLD",
+        token_type: "Bearer",
+        refresh_token: "RT",
+      },
+    });
+    upsert.mockRejectedValue(
+      new Error('Failed query\nparams: {"access_token":"SECRET_AT"}'),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const urlStr = typeof url === "string" ? url : (url as URL).toString();
+      if (urlStr.includes("/.well-known/"))
+        return new Response("nope", { status: 404 });
+      return jsonResponse(200, {
+        access_token: "SECRET_AT",
+        token_type: "Bearer",
+        expires_in: 3600,
+      });
+    });
+
+    const result = await tryRefreshUpstreamTokens(SERVER);
+
+    expect(result).toEqual({ status: "failed", error: "persist_failed" });
+    const logged = JSON.stringify([
+      vi.mocked(logger.info).mock.calls,
+      vi.mocked(logger.warn).mock.calls,
+      vi.mocked(logger.error).mock.calls,
+    ]);
+    expect(logged).not.toContain("SECRET_AT");
+  });
+
   it("returns no_session when no oauth_sessions row exists", async () => {
     const { tryRefreshUpstreamTokens, findByMcpServerUuid, upsert } =
       await loadModule();
